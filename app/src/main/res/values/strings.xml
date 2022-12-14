@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Arrhythmias Classifier App</string>
+    <string name="gallery">Gallery</string>
+    <string name="camera">camera</string>
+    <string name="imageView">Image</string>
+    <string name="classified_as">Classified as:</string>
+</resources>
