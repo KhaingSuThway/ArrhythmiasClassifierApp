@@ -84,9 +84,9 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until 224) {
             for(j in 0 until 224) {
                 val input = intValues[pixel++]
-                byteBuffer.put((input shr 16 and 0xFF) as Byte)
-                byteBuffer.put((input.shr(8) and 0xFF) as Byte)
-                byteBuffer.put((input and 0xFF) as Byte)
+                byteBuffer.put((input shr 16 and 0xFF).toByte())
+                byteBuffer.put((input.shr(8) and 0xFF).toByte())
+                byteBuffer.put((input and 0xFF).toByte())
             }
         }
         inputFeature0.loadBuffer(byteBuffer)
