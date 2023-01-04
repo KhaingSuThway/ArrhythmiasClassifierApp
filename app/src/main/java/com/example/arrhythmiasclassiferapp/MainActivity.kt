@@ -9,7 +9,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.media.ThumbnailUtils
 import android.net.Uri
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
@@ -17,6 +16,7 @@ import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import coil.load
 import coil.transform.RoundedCornersTransformation
 import com.example.arrhythmiasclassiferapp.databinding.ActivityMainBinding
@@ -84,9 +84,9 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until 224) {
             for(j in 0 until 224) {
                 val input = intValues[pixel++]
-                byteBuffer.putFloat(((input.shr(16) and 0xFF) * (1.toFloat() / 1)))
-                byteBuffer.putFloat(((input.shr(8) and 0xFF) * (1.toFloat()/ 1)))
-                byteBuffer.putFloat(((input and 0xFF) * (1.toFloat()/ 1)))
+                byteBuffer.put((input shr 16 and 0xFF) as Byte)
+                byteBuffer.put((input.shr(8) and 0xFF) as Byte)
+                byteBuffer.put((input and 0xFF) as Byte)
             }
         }
         inputFeature0.loadBuffer(byteBuffer)
