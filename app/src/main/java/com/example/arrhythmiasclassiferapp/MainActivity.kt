@@ -30,15 +30,23 @@ import com.karumi.dexter.listener.PermissionRequest
 import com.karumi.dexter.listener.multi.MultiplePermissionsListener
 import com.karumi.dexter.listener.single.PermissionListener
 import org.tensorflow.lite.DataType
+import org.tensorflow.lite.support.common.ops.NormalizeOp
+import org.tensorflow.lite.support.common.ops.QuantizeOp
+import org.tensorflow.lite.support.image.ColorSpaceType
+import org.tensorflow.lite.support.image.ImageProcessor
+import org.tensorflow.lite.support.image.TensorImage
+import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.min
 
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var result: TextView
+    private lateinit var tv :TextView
     private val CAMERA_REQUEST_CODE=1
     private val GALLERY_REQUEST_CODE=2
 
@@ -48,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         result=findViewById(R.id.result)
+        tv=findViewById (R.id.textView)
 
         binding.btnCamera.setOnClickListener {
             cameraCheckPermission()        }
@@ -72,46 +81,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun classifyImage(bitmap: Bitmap) = try{
-        val model = Mv2.newInstance(this)
 
-// Creates inputs for reference.
-        val inputFeature0 = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), DataType.FLOAT32)
-        val byteBuffer: ByteBuffer = ByteBuffer.allocateDirect(4*224*224*3)
-        byteBuffer.order(ByteOrder.nativeOrder())
-        val intValues=IntArray(224*224)
-        bitmap.getPixels(intValues,0,224,0,0,224,224)
-        var pixel=0
-        for (i in 0 until 224) {
-            for(j in 0 until 224) {
-                val input = intValues[pixel++]
-                byteBuffer.put((input shr 16 and 0xFF).toByte())
-                byteBuffer.put((input.shr(8) and 0xFF).toByte())
-                byteBuffer.put((input and 0xFF).toByte())
-            }
-        }
-        inputFeature0.loadBuffer(byteBuffer)
+            val model = Mv2.newInstance(this)
+            val imgprocessor = ImageProcessor.Builder()
+            // .add(ResizeWithCropOrPadOp(64, 64))
+            .add(ResizeOp(224, 224, ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+            .add(NormalizeOp(127.5f, 127.5f))
+            .add(QuantizeOp(128.0f, 1 / 128.0f)).build()
 
-// Runs model inference and gets result.
-        val outputs = model.process(inputFeature0)
-        val outputFeature0 = outputs.outputFeature0AsTensorBuffer
-//TODO to markdown values of the model output
-        val confidences:FloatArray = outputFeature0.floatArray
-        var maxPos = 0
-        var maxConfidence = 0f
-        for (i in confidences.indices) {
-            if (confidences[i] > maxConfidence) {
-                maxConfidence = confidences[i]
-                maxPos = i
+            val newBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true)
+            val tfimage = TensorImage(DataType.FLOAT32)
+            tfimage.load(newBitmap)
+            val inputImage=imgprocessor.process(tfimage)
+            val tensorbuffr=inputImage.tensorBuffer
+            val tensorimg = TensorImage(DataType.FLOAT32)
+            tensorimg.load(tensorbuffr, ColorSpaceType.RGB)
+            val byteBuffer: ByteBuffer =tensorimg.buffer
+
+
+    // Creates inputs for reference.
+            val inputFeature0 = TensorBuffer.createFixedSize(intArrayOf(1, 224, 224, 3), DataType.FLOAT32)
+            //val byteBuffer: ByteBuffer = ByteBuffer.allocateDirect(4*224*224*3)
+            byteBuffer.order(ByteOrder.nativeOrder())
+            val intValues=IntArray(224*224)
+            bitmap.getPixels(intValues,0,224,0,0,224,224)
+
+            for (pixelValue in intValues) {
+                val r = (pixelValue shr 16 and 0xFF)
+                val g = (pixelValue shr 8 and 0xFF)
+                val b = (pixelValue and 0xFF)
+
+                // Normalize pixel value to [0..1]
+                val normalizedPixelValue = (r + g + b)  /255.0f
+                byteBuffer.putFloat(normalizedPixelValue)
             }
+
+            inputFeature0.loadBuffer(byteBuffer)
+
+    // Runs model inference and gets result.
+            val outputs = model.process(inputFeature0)
+            val outputFeature0 = outputs.outputFeature0AsTensorBuffer
+
+            // Get the data of the TensorBuffer as a float array
+            val confidences: FloatArray = outputFeature0.floatArray
+
+            // Find the largest number and its index
+            val (largestNumberIndex,largestNumber) = confidences.withIndex().maxBy { it.value }
+            val confidence = largestNumber.toInt()  / 255.0f
+            val classes : Array<String> = arrayOf("AF","NSR","PAC","PVC")
+            result.text = classes[largestNumberIndex]
+            tv.text = ""
+            val arraySize:Int=confidences.size
+            for (i in 0 until arraySize) {
+                tv.append(confidences[i].toString());
+                tv.append(",")
         }
-        val classes : Array<String> = arrayOf("AF","NSR","PAC","PVC")
-        result.text = classes[maxPos]
-// Releases model resources if no longer used.
-        model.close()
-    }
-    catch (e: IllegalStateException){
-        Log.e(ContentValues.TAG, "TFLite failed to load model with error: " )
-    }
+
+//            tv.text = confidences[0].toString()
+
+            // Releases model resources if no longer used.
+            model.close()
+
+        }
+        catch (e: IllegalStateException){
+            Log.e(ContentValues.TAG, "TFLite failed to load model with error: " )
+        }
+
+
 
     private fun cameraCheckPermission() {
         Dexter.withContext(this)
@@ -203,16 +239,19 @@ class MainActivity : AppCompatActivity() {
                     image = Bitmap.createScaledBitmap(image, 224, 224, false)
                     classifyImage(image)
 
+
                 }
                 GALLERY_REQUEST_CODE -> {
                     binding.imageView.load(data?.data)
                     val dat =data?.data
                     val image= MediaStore.Images.Media.getBitmap(this.contentResolver, dat)
                     classifyImage(image)
+
                 }
             }
         }
     }
+
 
 
 }
